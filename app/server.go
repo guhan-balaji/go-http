@@ -27,23 +27,20 @@ func main() {
             fmt.Println("Error accepting connection: ", err.Error())
             os.Exit(1)
         }
-        if isValidRequest(conn) {
+        b := make([]byte, 1024)
+        n, err := conn.Read(b)
+        if err != nil {
+            fmt.Println("Error reading connection: ", err.Error())
+            os.Exit(1)
+        }
+        fmt.Println("Read byte size: ", n)
+
+        request := string(b)
+        if strings.HasPrefix(request, "GET / HTTP/1.1\r\n") {
             conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
         } else {
             conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
         }
         conn.Close()
     }
-}
-
-func isValidRequest(conn net.Conn) bool {
-    b := make([]byte, 1024)
-    conn.Read(b)
-    request := string(b)
-    fmt.Println("Recieved request: ", request)
-    parts := strings.Split(request, "\r\n")
-    requestLine := parts[0]
-    rl := strings.Split(requestLine, " ")
-    path := rl[1]
-    return path == "/"
 }
