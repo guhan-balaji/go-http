@@ -66,22 +66,22 @@ func deserializeHttpRequest(request []byte) *Request {
                 switch {
 
                 case strings.HasPrefix(rp, "Host"):
-                        req.host = rp[len("Host: "):]
+                        req.host = strings.TrimPrefix(rp, "Host: ")
 
                 case strings.HasPrefix(rp, "User-Agent"):
-                        req.userAgent = rp[len("User-Agent: "):]
+                        req.userAgent = strings.TrimPrefix(rp, "User-Agent: ")
 
                 case strings.HasPrefix(rp, "Accept-Encoding"):
-                        req.acceptEncoding = rp[len("Accept-Encoding: "):]
+                        req.acceptEncoding = strings.TrimPrefix(rp, "Accept-Encoding: ")
 
                 case strings.HasPrefix(rp, "Accept"):
-                        req.accept = rp[len("Accept: "):]
+                        req.accept = strings.TrimPrefix(rp, "Accept: ")
 
                 case strings.HasPrefix(rp, "Content-Type: "):
-                        req.contentType = rp[len("Content-Type: "):]
+                        req.contentType = strings.TrimPrefix(rp, "Content-Type: ")
 
                 case strings.HasPrefix(rp, "Content-Length: "):
-                        req.contentLength = rp[len("Content-Length: "):]
+                        req.contentLength = strings.TrimPrefix(rp, "Content-Length: ")
 
                 default:
                         continue
@@ -113,7 +113,7 @@ func handleGetRequest(req *Request, conn net.Conn) {
         case req.target == "/":
                 conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 
-        case req.acceptEncoding == "gzip":
+        case strings.Contains(req.acceptEncoding, "gzip"):
 
                 conn.Write([]byte(
                         fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Encoding: gzip\r\n\r\n",
