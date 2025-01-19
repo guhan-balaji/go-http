@@ -6,6 +6,8 @@ import (
         "os"
         "strings"
         "strconv"
+        "compress/gzip"
+        "bytes"
 )
 
 type Request struct {
@@ -38,6 +40,8 @@ func main() {
                 }
 
                 go func(c net.Conn) {
+                        defer c.Close()
+
                         request := make([]byte, 1024)
                         _, err = c.Read(request)
                         if err != nil {
@@ -47,7 +51,6 @@ func main() {
 
                         req := deserializeHttpRequest(request)
                         sendResponse(req, c)
-                        c.Close()
                 }(conn)
         }
 }
@@ -113,11 +116,25 @@ func handleGetRequest(req *Request, conn net.Conn) {
         case req.target == "/":
                 conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 
-        case strings.Contains(req.acceptEncoding, "gzip"):
+        case strings.Contains(req.acceptEncoding, "gzip") && strings.HasPrefix(req.target, "/echo/"):
 
-                conn.Write([]byte(
-                        fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Encoding: gzip\r\n\r\n",
-                )))
+                var body bytes.Buffer
+                zw := gzip.NewWriter(&body)
+                content := req.target[len("/echo/"):]
+
+                _, err := zw.Write([]byte(content))
+                err = zw.Close()
+
+
+                if err != nil {
+                        conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+                } else {
+                        conn.Write([]byte(
+                                fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Encoding: gzip\r\nContent-Length: %d\r\n\r\n%s",
+                                len(body.String()),
+                                body.String(),
+                        )))
+                }
 
 
         case strings.HasPrefix(req.target, "/echo/"):
