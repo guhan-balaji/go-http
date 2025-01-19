@@ -5,6 +5,7 @@ import (
         "net"
         "os"
         "strings"
+        "strconv"
 )
 
 type Request struct {
@@ -12,8 +13,11 @@ type Request struct {
         verb, target, protocol string
 
         // headers
-        host, userAgent, accept string
+        host, userAgent, accept,
+        contentType, contentLength string
 
+        //body
+        body string
 }
 
 
@@ -51,7 +55,6 @@ func main() {
 func deserializeHttpRequest(request []byte) *Request {
         var req Request
         reqParts := strings.Split(string(request), "\r\n")
-        fmt.Println(reqParts)
 
         reqLine := strings.Split(reqParts[0], " ")
         req.verb     = reqLine[0]
@@ -60,24 +63,49 @@ func deserializeHttpRequest(request []byte) *Request {
 
 
         for _, rp := range reqParts[1:] {
-                if strings.HasPrefix(rp, "Host") {
+                switch {
+
+                case strings.HasPrefix(rp, "Host"):
                         req.host = rp[len("Host: "):]
-                } else if strings.HasPrefix(rp, "User-Agent") {
+                case strings.HasPrefix(rp, "User-Agent"):
                         req.userAgent = rp[len("User-Agent: "):]
-                } else if strings.HasPrefix(rp, "Accept") {
+                case strings.HasPrefix(rp, "Accept"):
                         req.accept = rp[len("Accept: "):]
+                case strings.HasPrefix(rp, "Content-Type: "):
+                        req.contentType = rp[len("Content-Type: "):]
+                case strings.HasPrefix(rp, "Content-Length: "):
+                        req.contentLength = rp[len("Content-Length: "):]
+                default:
+                        continue
+
                 }
         }
+
+        if reqParts[len(reqParts) - 2] == "" {
+                req.body = reqParts[len(reqParts) - 1]
+        }
+
         return &req
 }
 
 func sendResponse(req *Request, conn net.Conn) {
+        switch req.verb {
+        case "GET":
+                handleGetRequest(req, conn)
+        case "POST":
+                handlePostRequest(req, conn)
+        default:
+                conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
 
-        if req.verb == "GET" && req.target == "/" {
+        }
+}
+
+func handleGetRequest(req *Request, conn net.Conn) {
+        if req.target == "/" {
 
                 conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 
-        } else if req.verb == "GET" && strings.HasPrefix(req.target, "/echo/") {
+        } else if strings.HasPrefix(req.target, "/echo/") {
 
                 conn.Write([]byte(
                         fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
@@ -85,7 +113,7 @@ func sendResponse(req *Request, conn net.Conn) {
                         req.target[len("/echo/"):],
                 )))
 
-        } else if req.verb == "GET" && strings.HasPrefix(req.target, "/user-agent") {
+        } else if strings.HasPrefix(req.target, "/user-agent") {
 
                 conn.Write([]byte(
                         fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
@@ -93,7 +121,7 @@ func sendResponse(req *Request, conn net.Conn) {
                         req.userAgent,
                 )))
 
-        } else if req.verb == "GET" && strings.HasPrefix(req.target, "/files") {
+        } else if strings.HasPrefix(req.target, "/files") {
                 fn := req.target[len("/files/"):]
                 path := os.Args[2] + fn;
                 content, err := os.ReadFile(path)
@@ -114,4 +142,23 @@ func sendResponse(req *Request, conn net.Conn) {
 
                 conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
         }
+}
+
+func handlePostRequest(req *Request, conn net.Conn) {
+        if !strings.HasPrefix(req.target, "/files/") {
+                conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
+        }
+
+        fn := req.target[len("/files/"):]
+        path := os.Args[2] + fn
+        l, err := strconv.Atoi(req.contentLength)
+        if err != nil {
+                conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+        }
+
+        err = os.WriteFile(path, []byte(req.body[:l]), 0644)
+        if err != nil {
+                conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+        }
+        conn.Write([]byte("HTTP/1.1 201 Created\r\n\r\n"))
 }
