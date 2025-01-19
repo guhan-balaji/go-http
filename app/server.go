@@ -93,6 +93,23 @@ func sendResponse(req *Request, conn net.Conn) {
                         req.userAgent,
                 )))
 
+        } else if req.verb == "GET" && strings.HasPrefix(req.target, "/files") {
+                fn := req.target[len("/files/"):]
+                path := os.Args[2] + fn;
+                content, err := os.ReadFile(path)
+
+                if err != nil {
+                        conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+                } else {
+
+                        conn.Write([]byte(
+                                fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s",
+                                len(content),
+                                content,
+                        )))
+
+                }
+
         } else {
 
                 conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
