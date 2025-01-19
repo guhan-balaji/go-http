@@ -32,32 +32,26 @@ func main() {
                         fmt.Println("Error accepting connection: ", err.Error())
                         os.Exit(1)
                 }
-                defer conn.Close()
 
-                request := make([]byte, 1024)
-                _, err = conn.Read(request)
-                if err != nil {
-                        fmt.Println("Error reading connection: ", err.Error())
-                        os.Exit(1)
-                }
+                go func(c net.Conn) {
+                        request := make([]byte, 1024)
+                        _, err = c.Read(request)
+                        if err != nil {
+                                fmt.Println("Error reading connection: ", err.Error())
+                                os.Exit(1)
+                        }
 
-                req := deserializeHttpRequest(request)
-                fmt.Println(req.verb)
-                fmt.Println(req.target)
-                fmt.Println(req.protocol)
-                fmt.Println(req.host)
-                fmt.Println(req.userAgent)
-                fmt.Println(req.accept)
-                sendResponse(req, conn)
-                conn.Close()
+                        req := deserializeHttpRequest(request)
+                        sendResponse(req, c)
+                        c.Close()
+                }(conn)
         }
 }
 
 func deserializeHttpRequest(request []byte) *Request {
+        var req Request
         reqParts := strings.Split(string(request), "\r\n")
         fmt.Println(reqParts)
-
-        req := new(Request)
 
         reqLine := strings.Split(reqParts[0], " ")
         req.verb     = reqLine[0]
@@ -74,7 +68,7 @@ func deserializeHttpRequest(request []byte) *Request {
                         req.accept = rp[len("Accept: "):]
                 }
         }
-        return req
+        return &req
 }
 
 func sendResponse(req *Request, conn net.Conn) {
