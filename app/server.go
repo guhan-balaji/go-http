@@ -13,7 +13,7 @@ type Request struct {
         verb, target, protocol string
 
         // headers
-        host, userAgent, accept,
+        host, userAgent, accept, acceptEncoding,
         contentType, contentLength string
 
         //body
@@ -67,14 +67,22 @@ func deserializeHttpRequest(request []byte) *Request {
 
                 case strings.HasPrefix(rp, "Host"):
                         req.host = rp[len("Host: "):]
+
                 case strings.HasPrefix(rp, "User-Agent"):
                         req.userAgent = rp[len("User-Agent: "):]
+
+                case strings.HasPrefix(rp, "Accept-Encoding"):
+                        req.acceptEncoding = rp[len("Accept-Encoding: "):]
+
                 case strings.HasPrefix(rp, "Accept"):
                         req.accept = rp[len("Accept: "):]
+
                 case strings.HasPrefix(rp, "Content-Type: "):
                         req.contentType = rp[len("Content-Type: "):]
+
                 case strings.HasPrefix(rp, "Content-Length: "):
                         req.contentLength = rp[len("Content-Length: "):]
+
                 default:
                         continue
 
@@ -101,19 +109,25 @@ func sendResponse(req *Request, conn net.Conn) {
 }
 
 func handleGetRequest(req *Request, conn net.Conn) {
-        if req.target == "/" {
-
+        switch {
+        case req.target == "/":
                 conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 
-        } else if strings.HasPrefix(req.target, "/echo/") {
+        case req.acceptEncoding == "gzip":
 
+                conn.Write([]byte(
+                        fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Encoding: gzip\r\n\r\n",
+                )))
+
+
+        case strings.HasPrefix(req.target, "/echo/"):
                 conn.Write([]byte(
                         fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
                         len(req.target) - len("/echo/"),
                         req.target[len("/echo/"):],
                 )))
 
-        } else if strings.HasPrefix(req.target, "/user-agent") {
+        case strings.HasPrefix(req.target, "/user-agent"):
 
                 conn.Write([]byte(
                         fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
@@ -121,7 +135,7 @@ func handleGetRequest(req *Request, conn net.Conn) {
                         req.userAgent,
                 )))
 
-        } else if strings.HasPrefix(req.target, "/files") {
+        case strings.HasPrefix(req.target, "/files"):
                 fn := req.target[len("/files/"):]
                 path := os.Args[2] + fn;
                 content, err := os.ReadFile(path)
@@ -129,20 +143,19 @@ func handleGetRequest(req *Request, conn net.Conn) {
                 if err != nil {
                         conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
                 } else {
-
                         conn.Write([]byte(
                                 fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s",
                                 len(content),
                                 content,
                         )))
-
                 }
 
-        } else {
+        default:
 
                 conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
         }
 }
+
 
 func handlePostRequest(req *Request, conn net.Conn) {
         if !strings.HasPrefix(req.target, "/files/") {
